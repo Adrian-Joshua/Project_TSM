@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
@@ -7,9 +8,9 @@ public class FirstPersonController : MonoBehaviour
 {
     //To set the player to can move or not
     public bool CanMove { get; private set; } = true;
-    private bool IsSprinting => canSprint && Input.GetKey(sprintKey) && !IsSliding;
-    private bool ShouldJump => Input.GetKeyDown(jumpKey) && characterController.isGrounded && !IsSliding;
-    private bool ShouldCrouch => Input.GetKeyDown(crouchKey) && !duringCrouchAnimation && characterController.isGrounded;
+    private bool IsSprinting => canSprint && Input.GetKey(sprintKey) && !IsSliding && !IsCrouching;
+    private bool ShouldJump => canJump && Input.GetKeyDown(jumpKey) && characterController.isGrounded && !IsSliding && !IsCrouching;
+    private bool ShouldCrouch => canCrouch && Input.GetKeyDown(crouchKey) && !duringCrouchAnimation && characterController.isGrounded;
 
 
 
@@ -23,6 +24,7 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private bool canZoom = true;
     [SerializeField] private bool canInteract = true;
     [SerializeField] private bool useFootsteps = true;
+    [SerializeField] private bool useStamina = true;
 
 
     [Header("Controls")]
@@ -49,6 +51,28 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField, Range(1, 180)] private float upperLookLimit = 80.0f;
     [SerializeField, Range(1, 180)] private float lowerLookLimit = 80.0f;
 
+    [Header("Health Parmeters")]
+    [SerializeField] private float maxHealth = 100.0f;
+    [SerializeField] private float timeBeforeRegenStarts = 3.0f;
+    [SerializeField] private float healthValueIncrement = 1.0f;
+    [SerializeField] private float healthTimeIncrement = 0.1f;
+    private float currentHealth;
+    private Coroutine regeneratingHealth;
+
+    public static Action<float> OnTakeDamage;
+    public static Action<float> OnDamage;
+    public static Action<float> OnHeal;
+
+    [Header("Stamina Parmeters")]
+    [SerializeField] private float maxStamina = 100.0f;
+    [SerializeField] private float staminaUseMultiplier = 5.0f;
+    [SerializeField] private float timeBeforeStaminaRegenStarts = 5.0f;
+    [SerializeField] private float staminaValueIncrement = 2.0f;
+    [SerializeField] private float staminaTimeIncrement = 0.1f;
+    private float currentStamina;
+    private Coroutine regeneratingStamina;
+
+    public static Action<float> OnStaminaChange;
 
     [Header("Jumping Parameters")]
     [SerializeField] private float jumpForce = 8.0f;
@@ -132,12 +156,27 @@ public class FirstPersonController : MonoBehaviour
 
     private float rotationX = 0.0f;
 
+    public static FirstPersonController instance;
+
+    private void OnEnable()
+    {
+        OnTakeDamage += ApplyDamage;
+    }
+
+    private void OnDisable()
+    {
+        OnTakeDamage -= ApplyDamage;
+    }
+
     void Awake()
     {
+        instance = this;
         playerCamera = GetComponentInChildren<Camera>();
         characterController = GetComponent<CharacterController>();
         defaultYPos = playerCamera.transform.localPosition.y;
         defaultFOV = playerCamera.fieldOfView;
+        currentHealth = maxHealth;
+        currentStamina = maxStamina;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -177,6 +216,10 @@ public class FirstPersonController : MonoBehaviour
             {
                 HandleInteractionCheck();
                 HandleInteractionInput();
+            }
+            if (useStamina)
+            {
+                HandleStamina();
             }
           
             ApplyFinalMovements();
@@ -233,6 +276,37 @@ public class FirstPersonController : MonoBehaviour
 
     }
 
+    private void HandleStamina()
+    {
+        if(IsSprinting && currentInput != Vector2.zero)
+        {
+            if(regeneratingStamina != null)
+            {
+                StopCoroutine(regeneratingStamina);
+                regeneratingStamina = null;
+            }
+
+            currentStamina -= staminaUseMultiplier * Time.deltaTime;
+
+            if(currentStamina < 0)
+            {
+                currentStamina = 0;
+            }
+
+            OnStaminaChange?.Invoke(currentStamina);
+
+            if(currentStamina <= 0)
+            {
+                canSprint = false;
+            }
+        }
+
+
+        if(!IsSprinting && currentStamina < maxStamina && regeneratingStamina == null)
+        {
+            regeneratingStamina = StartCoroutine(RegenerateStamina());
+        }
+    }
 
     private void HandleZoom()
     {
@@ -305,16 +379,16 @@ public class FirstPersonController : MonoBehaviour
                 switch (hit.collider.tag)
                 {
                     case "Footsteps/Wood":
-                        footstepAudioSource.PlayOneShot(woodClips[Random.Range(0, woodClips.Length - 1)]);
+                        footstepAudioSource.PlayOneShot(woodClips[UnityEngine.Random.Range(0, woodClips.Length - 1)]);
                         break;
                     case "Footsteps/Grass":
-                        footstepAudioSource.PlayOneShot(grassClips[Random.Range(0, grassClips.Length - 1)]);
+                        footstepAudioSource.PlayOneShot(grassClips[UnityEngine.Random.Range(0, grassClips.Length - 1)]);
                         break;
                     case "Footsteps/Metal":
-                        footstepAudioSource.PlayOneShot(metalClips[Random.Range(0, metalClips.Length - 1)]);
+                        footstepAudioSource.PlayOneShot(metalClips[UnityEngine.Random.Range(0, metalClips.Length - 1)]);
                         break;
                     default:
-                        footstepAudioSource.PlayOneShot(tileClips[Random.Range(0, tileClips.Length - 1)]);
+                        footstepAudioSource.PlayOneShot(tileClips[UnityEngine.Random.Range(0, tileClips.Length - 1)]);
                         break;
 
                 }
@@ -323,6 +397,35 @@ public class FirstPersonController : MonoBehaviour
             footStepTimer = GetCurrentOffset;
         }
     }
+
+    private void ApplyDamage(float dmg)
+    {
+        currentHealth -= dmg;
+        OnDamage?.Invoke(currentHealth);
+
+        if(currentHealth <= 0)
+        {
+            KillPlayer();
+        }
+        else if (regeneratingHealth != null)
+        {
+            StopCoroutine(regeneratingHealth);
+        }
+
+        regeneratingHealth = StartCoroutine(RegenerateHealth());
+    }
+
+    private void KillPlayer()
+    {
+        currentHealth = 0;
+        if (regeneratingHealth != null)
+        {
+            StopCoroutine(RegenerateHealth());
+        }
+
+        Debug.Log("Player Dead");
+    }
+
 
 
     private void ApplyFinalMovements()
@@ -391,5 +494,49 @@ public class FirstPersonController : MonoBehaviour
         }
         playerCamera.fieldOfView = targetFOV;
         zoomRoutine = null;
+    }
+
+    private IEnumerator RegenerateHealth()
+    {
+        yield return new WaitForSeconds(timeBeforeRegenStarts);
+        WaitForSeconds timeToWait = new WaitForSeconds(healthTimeIncrement);
+
+        while (currentHealth < maxHealth)
+        {
+            currentHealth += healthValueIncrement;
+
+            if(currentHealth > maxHealth)
+            {
+                currentHealth = maxHealth;
+            }
+
+            OnHeal?.Invoke(currentHealth);
+            yield return timeToWait;
+        }
+
+        regeneratingHealth = null;
+    }
+
+    private IEnumerator RegenerateStamina()
+    {
+        yield return new WaitForSeconds(timeBeforeStaminaRegenStarts);
+        WaitForSeconds timetoWait = new WaitForSeconds(staminaTimeIncrement);
+
+        while(currentStamina < maxStamina)
+        {
+            if(currentStamina > 0)
+            {
+                canSprint = true;
+            }
+            currentStamina += staminaValueIncrement;
+            if(currentStamina > maxStamina)
+            {
+                currentStamina = maxStamina;
+            }
+            OnStaminaChange?.Invoke(currentStamina);
+            yield return timetoWait;
+
+        }
+        regeneratingStamina = null;
     }
 }
