@@ -31,7 +31,7 @@ public class Door : Interactable
             //Forward direction of Door
             Vector3 doorTransformDirection = transform.TransformDirection(Vector3.forward);
             
-            //Direction of player
+            //Direction of door to player
             Vector3 playerTransformDirection = FirstPersonController.instance.transform.position - transform.position;
            
             //Dot product of their vectors. Negative value = Player Behind door ; Positive value = Player Infront door

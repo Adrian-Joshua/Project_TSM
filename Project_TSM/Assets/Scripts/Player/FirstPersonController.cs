@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityTutorial.Manager;
 
 public class FirstPersonController : MonoBehaviour
 {
@@ -85,7 +86,7 @@ public class FirstPersonController : MonoBehaviour
     [SerializeField] private float timeToCrouch = 0.25f;
     [SerializeField] private Vector3 crouchingCenter = new Vector3(0, 0.5f, 0);
     [SerializeField] private Vector3 standingCenter = new Vector3(0, 0, 0);
-    private bool IsCrouching;
+    public bool IsCrouching;
     private bool duringCrouchAnimation;
 
 
@@ -152,11 +153,35 @@ public class FirstPersonController : MonoBehaviour
     private Camera playerCamera;
     private CharacterController characterController;
     private Vector3 moveDirection;
-    private Vector2 currentInput;
+    public Vector2 currentInput;
 
     private float rotationX = 0.0f;
 
     public static FirstPersonController instance;
+
+
+
+
+
+
+
+    //Animation
+    //private Animator _animator;
+
+    //private bool _hashAnimator;
+
+    //private int _xVelHash;
+
+    //private int _yVelHash;
+
+    //private int _crouchHash;
+
+    //[SerializeField] private Transform CameraRoot;
+
+    //[SerializeField] private Transform Camera;
+
+    //[SerializeField] private float AnimBlendSpeed = 8.9f;
+    //private Vector2 _currentVelocity;
 
     private void OnEnable()
     {
@@ -173,6 +198,16 @@ public class FirstPersonController : MonoBehaviour
         instance = this;
         playerCamera = GetComponentInChildren<Camera>();
         characterController = GetComponent<CharacterController>();
+
+        //_hashAnimator = TryGetComponent<Animator>(out _animator);
+        //_xVelHash = Animator.StringToHash("X_Velocity");
+        //_yVelHash = Animator.StringToHash("Y_Velocity");
+        //_crouchHash = Animator.StringToHash("Crouch");
+
+
+
+
+
         defaultYPos = playerCamera.transform.localPosition.y;
         defaultFOV = playerCamera.fieldOfView;
         currentHealth = maxHealth;
@@ -184,6 +219,8 @@ public class FirstPersonController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+       
+
         if (CanMove)
         {
             HandleMovementInput();
@@ -229,17 +266,35 @@ public class FirstPersonController : MonoBehaviour
     private void HandleMovementInput()
     {
         currentInput = new Vector2((IsCrouching ? crouchSpeed : IsSprinting ? sprintSpeed : walkSpeed) * Input.GetAxis("Vertical"),(IsCrouching ? crouchSpeed : IsSprinting ? sprintSpeed : walkSpeed ) * Input.GetAxis("Horizontal"));
+        float targetSpeed = IsCrouching ? crouchSpeed : IsSprinting ? sprintSpeed : walkSpeed;
 
         float moveDirectionY = moveDirection.y;
 
         moveDirection = (transform.TransformDirection(Vector3.forward) * currentInput.x) + (transform.TransformDirection(Vector3.right) * currentInput.y);
         moveDirection.y = moveDirectionY;
+
+
+        //_currentVelocity.x = Mathf.Lerp(_currentVelocity.x, _inputManager.Move.x * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
+        //_currentVelocity.y = Mathf.Lerp(_currentVelocity.y, _inputManager.Move.y * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
+
+        //_currentVelocity.y = Mathf.Lerp(_currentVelocity.y, currentInput.y, AnimBlendSpeed * Time.fixedDeltaTime);
+        //_currentVelocity.x = Mathf.Lerp(_currentVelocity.x, currentInput.x, AnimBlendSpeed * Time.fixedDeltaTime);
+
+        //Debug.Log(_currentVelocity.y);
+        //Debug.Log(_currentVelocity.x);
+
+        //_animator.SetFloat(_xVelHash, _currentVelocity.y);
+        //_animator.SetFloat(_yVelHash, _currentVelocity.x);
+        //_animator.SetBool(_crouchHash, IsCrouching);
     }
 
     private void HandleMouseLook()
     {
         rotationX -= Input.GetAxis("Mouse Y") * lookSpeedY;
         rotationX = Mathf.Clamp(rotationX, -upperLookLimit, lowerLookLimit);
+
+        //Camera.position = CameraRoot.position;
+
         playerCamera.transform.localRotation = Quaternion.Euler(rotationX, 0, 0);
 
         transform.rotation *= Quaternion.Euler(0, Input.GetAxis("Mouse X") * lookSpeedX, 0);
@@ -335,11 +390,12 @@ public class FirstPersonController : MonoBehaviour
 
     }
 
+
     private void HandleInteractionCheck()
     {
         if(Physics.Raycast(playerCamera.ViewportPointToRay(interactionRayPoint), out RaycastHit hit, interactionDistance))
         {
-            if (hit.collider.gameObject.layer == 7 && (currentInteractable == null || hit.collider.gameObject.GetInstanceID() != currentInteractable.GetInstanceID()))
+            if (hit.collider.gameObject.layer == 7 && (currentInteractable == null || hit.collider.gameObject.GetInstanceID() != currentInteractable.gameObject.GetInstanceID()))
             {
                 hit.collider.TryGetComponent(out currentInteractable);
 
@@ -458,9 +514,10 @@ public class FirstPersonController : MonoBehaviour
 
 
         duringCrouchAnimation = true;
-
+        
         float timeElapsed = 0.0f;
         float targetHeight = IsCrouching ? standingHeight : crouchingHeight;
+    
         float currentHeight = characterController.height;
         Vector3 targetCenter = IsCrouching ? standingCenter : crouchingCenter;
         Vector3 currentCenter = characterController.center;
@@ -468,12 +525,17 @@ public class FirstPersonController : MonoBehaviour
         while(timeElapsed < timeToCrouch)
         {
             characterController.height = Mathf.Lerp(currentHeight, targetHeight, timeElapsed / timeToCrouch);
-            characterController.center = Vector3.Lerp(currentCenter,targetCenter, timeElapsed / timeToCrouch);
+            characterController.center = Vector3.Lerp(currentCenter, targetCenter, timeElapsed / timeToCrouch);
+
+           
+
             timeElapsed += Time.deltaTime;
             yield return null;
         }
         characterController.height = targetHeight;
         characterController.center = targetCenter;
+      
+  
 
         IsCrouching = !IsCrouching;
 
